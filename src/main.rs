@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-// #![deny(warnings)]
+#![deny(warnings)]
 
 extern crate cortex_m_rt as rt;
 extern crate panic_halt;
