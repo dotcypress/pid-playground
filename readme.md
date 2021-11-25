@@ -1,6 +1,6 @@
 # pid-playground
 
-Usage: `cargo generate --git https://github.com/dotcypress/placebo-template.git`
+🦀 STM32G031F4 temperature PID regulator with serial shell.
 
 ## License
 
