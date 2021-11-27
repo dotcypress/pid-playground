@@ -111,9 +111,8 @@ impl Env<'_> {
         Ok(())
     }
 
-    fn trace_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
+    fn trace_cmd(&mut self, _shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
         self.trace.lock(|trace| *trace = true);
-        shell.write_str(CR)?;
         Ok(())
     }
 
