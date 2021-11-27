@@ -3,11 +3,7 @@ use pid_loop::PID;
 
 pub const TEMP_MIN: i32 = 18_000;
 pub const TEMP_MAX: i32 = 48_000;
-
-pub const PID_WINDOW: usize = 8;
-pub const KP: DF = DF::new(28, 12);
-pub const KI: DF = DF::new(2, 12);
-pub const KD: DF = DF::new(1, 12);
+pub const PID_WINDOW: usize = 16;
 
 pub struct SensorCalibration {
     offset: i32,
@@ -39,11 +35,11 @@ impl Regulator {
     pub fn new(max_duty: u32) -> Self {
         Self {
             max_duty,
-            duty: DF::from(5_100),
+            duty: DF::from(0),
             target_temp: 30_000,
             last_temp: 0,
             last_duty: 0,
-            pid: PID::new(KP, KI, KD, 0, 0),
+            pid: PID::new(DF::new(1, 10), 0, 0, 0, 0),
         }
     }
 

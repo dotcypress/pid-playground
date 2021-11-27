@@ -1,6 +1,6 @@
 # pid-playground
 
-🦀 STM32G031F4 temperature PID regulator with serial shell.
+🦀 STM32G031F6 temperature PID regulator with serial shell.
 
 ## License
 

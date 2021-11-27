@@ -13,7 +13,7 @@ use crate::regulator::*;
 use crate::shell::*;
 use dyadic::DF;
 use hal::{analog::adc, gpio::*, prelude::*, serial, stm32, timer::*};
-use ushell::{autocomplete, history::LRUHistory, UShell};
+use ushell::{history::LRUHistory, UShell};
 
 #[rtic::app(device = hal::stm32, peripherals = true, dispatchers = [USART1])]
 mod app {
@@ -34,7 +34,7 @@ mod app {
         reg: Regulator,
         freq: u32,
         on: bool,
-        log: bool,
+        trace: bool,
     }
 
     #[init]
@@ -62,10 +62,8 @@ mod app {
         adc.calibrate();
 
         let temp_pin = port_a.pa1.into_analog();
-
-        let reg = Regulator::new(heater.get_max_duty());
-
         let temp_cal = SensorCalibration::new(1_900, DF::new(1_173, 10));
+        let reg = Regulator::new(heater.get_max_duty());
 
         let uart_cfg = serial::BasicConfig::default().baudrate(115_200.bps());
         let mut uart = ctx
@@ -75,7 +73,7 @@ mod app {
             .expect("Failed to init serial port");
         uart.listen(serial::Event::Rxne);
 
-        let shell = UShell::new(uart, autocomplete::NoAutocomplete, LRUHistory::default());
+        let shell = UShell::new(uart, AUTOCOMPLETE, LRUHistory::default());
 
         (
             Shared {
@@ -84,7 +82,7 @@ mod app {
                 heater,
                 freq: 0,
                 on: false,
-                log: false,
+                trace: false,
             },
             Local {
                 adc,
@@ -96,7 +94,7 @@ mod app {
         )
     }
 
-    #[task(capacity = 8, local = [shell], shared = [freq, on, log, reg, timer, heater], priority = 1)]
+    #[task(capacity = 8, local = [shell], shared = [freq, on, trace, reg, timer, heater], priority = 1)]
     fn env(ctx: env::Context, sig: EnvSignal) {
         let mut env = ctx.shared;
         env.on_signal(ctx.local.shell, sig).ok();
@@ -107,12 +105,12 @@ mod app {
         env::spawn(EnvSignal::SpinShell).ok();
     }
 
-    #[task(binds = TIM2, local = [adc, temp_cal, temp_pin], shared = [log, reg, timer, heater], priority = 2)]
+    #[task(binds = TIM2, local = [adc, temp_cal, temp_pin], shared = [trace, reg, timer, heater], priority = 2)]
     fn timer_tick(ctx: timer_tick::Context) {
         let timer_tick::SharedResources {
             mut reg,
             mut timer,
-            mut log,
+            mut trace,
             mut heater,
         } = ctx.shared;
         let timer_tick::LocalResources {
@@ -125,7 +123,7 @@ mod app {
         let duty = reg.lock(|reg| reg.update(temp));
         heater.lock(|heater| heater.set_duty(duty));
 
-        if log.lock(|log| *log) {
+        if trace.lock(|trace| *trace) {
             env::spawn(EnvSignal::LogState).ok();
         }
 
