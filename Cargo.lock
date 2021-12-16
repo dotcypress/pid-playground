@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "dyadic"
-version = "0.0.6"
+version = "0.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa54fbefa99c00abc692108ba17c66018726651c837b78d74263e8f5b0e3c96f"
+checksum = "0bd9186eb5c16e986ed771622df8017b173308763296154a9c45a10376868e87"
 
 [[package]]
 name = "embedded-hal"
@@ -260,9 +260,9 @@ checksum = "de96540e0ebde571dc55c73d60ef407c653844e6f9a1e2fdbd40c07b9252d812"
 
 [[package]]
 name = "pid-loop"
-version = "0.0.4"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a72e5e7ad9082f526516f04ad810076dae500f70924835fbf917d6ed98a6d731"
+checksum = "2dbd083a4fb1e78c41e2566f8baf45f52ad6a39969160184dfa5058ec436f29c"
 
 [[package]]
 name = "pid-playground"

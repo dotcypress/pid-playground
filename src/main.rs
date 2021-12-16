@@ -22,15 +22,15 @@ mod app {
     #[local]
     struct Local {
         adc: adc::Adc,
-        temp_pin: gpioa::PA1<Analog>,
-        temp_cal: SensorCalibration,
+        adc_pin: gpioa::PA1<Analog>,
         shell: shell::Shell,
     }
 
     #[shared]
     struct Shared {
         timer: Timer<stm32::TIM2>,
-        heater: pwm::PwmPin<stm32::TIM3, Channel2>,
+        pwm: pwm::PwmPin<stm32::TIM3, Channel2>,
+        inverse: bool,
         reg: Regulator,
         freq: u32,
         on: bool,
@@ -46,9 +46,9 @@ mod app {
         timer.listen();
 
         let pwm = ctx.device.TIM3.pwm(320.hz(), &mut rcc);
-        let mut heater = pwm.bind_pin(port_a.pa7);
-        heater.set_duty(0);
-        heater.enable();
+        let mut pwm = pwm.bind_pin(port_a.pa7);
+        pwm.set_duty(0);
+        pwm.enable();
 
         let mut adc = ctx.device.ADC.constrain(&mut rcc);
         adc.set_sample_time(adc::SampleTime::T_80);
@@ -61,9 +61,9 @@ mod app {
         delay.delay(100.us());
         adc.calibrate();
 
-        let temp_pin = port_a.pa1.into_analog();
-        let temp_cal = SensorCalibration::new(1_900, DF::new(1_173, 10));
-        let reg = Regulator::new(heater.get_max_duty());
+        let adc_pin = port_a.pa1.into_analog();
+        // let adc_cal = SensorCalibration::new(1_900, 1.into());
+        let reg = Regulator::new(pwm.get_max_duty() as i32);
 
         let uart_cfg = serial::BasicConfig::default().baudrate(115_200.bps());
         let mut uart = ctx
@@ -79,22 +79,22 @@ mod app {
             Shared {
                 reg,
                 timer,
-                heater,
+                pwm,
                 freq: 0,
                 on: false,
+                inverse: true,
                 trace: false,
             },
             Local {
                 adc,
                 shell,
-                temp_cal,
-                temp_pin,
+                adc_pin,
             },
             init::Monotonics(),
         )
     }
 
-    #[task(capacity = 8, local = [shell], shared = [freq, on, trace, reg, timer, heater], priority = 1)]
+    #[task(capacity = 8, local = [shell], shared = [freq, inverse, on, trace, reg, timer, pwm], priority = 1)]
     fn env(ctx: env::Context, sig: EnvSignal) {
         let mut env = ctx.shared;
         env.on_signal(ctx.local.shell, sig).ok();
@@ -105,23 +105,28 @@ mod app {
         env::spawn(EnvSignal::SpinShell).ok();
     }
 
-    #[task(binds = TIM2, local = [adc, temp_cal, temp_pin], shared = [trace, reg, timer, heater], priority = 2)]
+    #[task(binds = TIM2, local = [adc, adc_pin], shared = [trace, inverse, reg, timer, pwm], priority = 2)]
     fn timer_tick(ctx: timer_tick::Context) {
         let timer_tick::SharedResources {
             mut reg,
             mut timer,
             mut trace,
-            mut heater,
+            mut pwm,
+            mut inverse,
         } = ctx.shared;
-        let timer_tick::LocalResources {
-            adc,
-            temp_cal,
-            temp_pin,
-        } = ctx.local;
+        let timer_tick::LocalResources { adc, adc_pin } = ctx.local;
+        let raw = adc.read(adc_pin).unwrap_or(0);
 
-        let temp = temp_cal.scale(adc.read(temp_pin).unwrap_or(0));
-        let duty = reg.lock(|reg| reg.update(temp));
-        heater.lock(|heater| heater.set_duty(duty));
+        pub const MAX: i32 = 65_535;
+        let val = raw.clamp(0, MAX);
+        let val = if inverse.lock(|inverse| *inverse) {
+            MAX - val
+        } else {
+            val
+        };
+
+        let duty = reg.lock(|reg| reg.update(val));
+        pwm.lock(|pwm| pwm.set_duty(duty));
 
         if trace.lock(|trace| *trace) {
             env::spawn(EnvSignal::LogState).ok();
