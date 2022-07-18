@@ -43,7 +43,7 @@ impl Env<'_> {
 
     fn reset_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
         self.reg.lock(|reg| reg.reset());
-        self.pwm.lock(|heater| heater.set_duty(0));
+        self.pwm.lock(|pwm| pwm.set_duty(0));
         shell.write_str(CR)?;
         Ok(())
     }
@@ -95,9 +95,9 @@ impl Env<'_> {
     fn start_cmd(&mut self, shell: &mut Shell, args: &str) -> ShellResult<Uart> {
         match btoi::btoi::<u32>(args.as_bytes()) {
             Ok(freq) if freq <= 1_000 => {
-                self.timer.lock(|timer| timer.start(freq.hz()));
-                self.reg.lock(|reg| reg.pid.reset());
                 self.freq.lock(|f| *f = freq);
+                self.reg.lock(|reg| reg.pid.reset());
+                self.timer.lock(|timer| timer.start(freq.hz()));
                 shell.write_str(CR)?;
             }
             _ => shell.write_str(BAD_INPUT_ERR)?,
@@ -139,7 +139,7 @@ impl Env<'_> {
         Ok(())
     }
 
-    fn config_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
+    fn print_config_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
         let freq = self.freq.lock(|freq| *freq);
         let inverse = self.inverse.lock(|inverse| *inverse);
         let (sp, last, kp, ki, kd, kf, kv) = self.reg.lock(|reg| {
@@ -180,7 +180,7 @@ impl Environment<Uart, Autocomplete, History, (), 24> for Env<'_> {
         match cmd {
             "clear" => shell.clear()?,
             "help" => self.help_cmd(shell, args)?,
-            "config" => self.config_cmd(shell, args)?,
+            "config" => self.print_config_cmd(shell, args)?,
             "reset" => self.reset_cmd(shell, args)?,
             "set" => self.set_cmd(shell, args)?,
             "start" => self.start_cmd(shell, args)?,
@@ -238,7 +238,7 @@ COMMANDS:\r\n\
 \x20 set k<x> <n> (dp)    Set PID coefficients(kp, ki, kd, kf, kv)\r\n\
 \x20 inverse <on|off>     Set ADC inversion mode\r\n\
 \x20 reset                Reser regulator internal state\r\n\
-\x20 trace                Enable serial logger, Ctrl+C to toggle\r\n\
+\x20 trace                Enable serial logger\r\n\
 \x20 help [pinout|usage]  Print help message\r\n\
 \x20 clear                Clear screen\r\n\r\n\
 CONTROL KEYS:\r\n\
