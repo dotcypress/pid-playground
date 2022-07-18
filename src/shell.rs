@@ -146,6 +146,32 @@ impl Env<'_> {
         Ok(())
     }
 
+    fn clip_cmd(&mut self, shell: &mut Shell, args: &str) -> ShellResult<Uart> {
+        if args == "reset" {
+            self.reg.lock(|reg| reg.reset_clip());
+            shell.write_str(CR)?;
+        } else {
+            match args.split_once(' ') {
+                Some((low, up)) => {
+                    match (
+                        btoi::btoi::<i32>(low.as_bytes()),
+                        btoi::btoi::<i32>(up.as_bytes()),
+                    ) {
+                        (Ok(low), Ok(up)) => self.reg.lock(|reg| reg.clip(low, up)),
+                        _ => {
+                            shell.write_str(BAD_INPUT_ERR)?;
+                            return Ok(());
+                        }
+                    }
+                    shell.write_str(CR)?;
+                }
+                _ => shell.write_str(BAD_INPUT_ERR)?,
+            }
+        }
+
+        Ok(())
+    }
+
     fn print_config_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
         let freq = self.freq.lock(|freq| *freq);
         let fault = self.fault.lock(|fault| *fault);
@@ -196,6 +222,7 @@ impl Environment<Uart, Autocomplete, History, (), 24> for Env<'_> {
             "trace" => self.trace_cmd(shell, args)?,
             "target" => self.target_cmd(shell, args)?,
             "inverse" => self.inverse_cmd(shell, args)?,
+            "clip" => self.clip_cmd(shell, args)?,
             "" => shell.write_str(CR)?,
             _ => write!(shell, "{0}unsupported command: \"{1}\"{0}", CR, cmd)?,
         }
@@ -228,7 +255,7 @@ pub const AUTOCOMPLETE: Autocomplete = autocomplete::StaticAutocomplete([
     "reset",
     "set k",
     "start ",
-    "stop",
+    "clip ",
     "target",
     "trace",
 ]);
@@ -239,19 +266,20 @@ const SHELL_PROMPT: &str = "\x1b[35m» \x1b[0m";
 const HELP: &str = "\r\n\
 \x1b[33mPID Shell\x1b[0m v0.2\r\n\r\n\
 COMMANDS:\r\n\
-\x20 config               Print regulator config\r\n\
-\x20 start <freq>         Start regulator with provided frequency\r\n\
-\x20 stop                 Stop regulator\r\n\
-\x20 target <val>         Set target\r\n\
-\x20 set k<x> <n> (dp)    Set PID coefficients(kp, ki, kd, kf, kv)\r\n\
-\x20 inverse <on|off>     Set ADC inversion mode\r\n\
-\x20 reset                Reser regulator internal state\r\n\
-\x20 trace                Enable serial logger\r\n\
-\x20 help [pinout|usage]  Print help message\r\n\
-\x20 clear                Clear screen\r\n\r\n\
+\x20 config                     Print regulator config\r\n\
+\x20 start <freq>               Start regulator\r\n\
+\x20 stop                       Stop regulator\r\n\
+\x20 target <val>               Set target\r\n\
+\x20 set k<x> <n> (dp)          Set PID coefficients(p, i, d, f, v)\r\n\
+\x20 inverse <on|off>           Set ADC inversion mode\r\n\
+\x20 clip (reset) (<low> <up>)  Clip PWM duty\r\n\
+\x20 reset                      Reser regulator internal state\r\n\
+\x20 trace                      Enable serial logger\r\n\
+\x20 help [pinout|usage]        Print help message\r\n\
+\x20 clear                      Clear screen\r\n\r\n\
 CONTROL KEYS:\r\n\
-\x20 Ctrl+C               Toggle serial logger\r\n
-\x20 Ctrl+X               Stop regulator\r\n\r\n\
+\x20 Ctrl+C                     Toggle serial logger\r\n
+\x20 Ctrl+X                     Stop regulator\r\n\r\n\
 ";
 
 const USAGE: &str = "\r\n\
@@ -262,6 +290,8 @@ USAGE EXAMPLES:\r\n\
 \x20 stop            Stop regulator\r\n\
 \x20 trace           Enable serial logger\r\n\
 \x20 inverse off     Disable adc inversion\r\n\
+\x20 clip -100 5000  Clip PWM duty to [-100; 5000]\r\n\
+\x20 clip reset      Reset PWM duty clipping\r\n\
 \x20 config          Print regulator config\r\n\
 \x20 set kp 75 11    Set proportional gain to 75/2048\r\n\
 \x20 set ki 2        Set integral gain to 2\r\n\
