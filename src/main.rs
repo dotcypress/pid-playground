@@ -6,9 +6,11 @@ extern crate cortex_m_rt as rt;
 extern crate panic_halt;
 extern crate stm32g0xx_hal as hal;
 
+mod pwm;
 mod regulator;
 mod shell;
 
+use crate::pwm::*;
 use crate::regulator::*;
 use crate::shell::*;
 use dyadic::DF;
@@ -23,16 +25,13 @@ mod app {
     struct Local {
         adc: adc::Adc,
         adc_pin: gpioa::PA1<Analog>,
-        reg_pin: gpioa::PA5<Output<PushPull>>,
-        reg_comp_pin: gpioa::PA4<Output<PushPull>>,
         shell: shell::Shell,
     }
 
     #[shared]
     struct Shared {
         timer: Timer<stm32::TIM2>,
-        pwm: pwm::PwmPin<stm32::TIM3, Channel2>,
-        pwm_comp: pwm::PwmPin<stm32::TIM3, Channel1>,
+        pwm: PwmPack,
         inverse: bool,
         reg: Regulator,
         freq: u32,
@@ -44,18 +43,23 @@ mod app {
     fn init(ctx: init::Context) -> (Shared, Local, init::Monotonics) {
         let mut rcc = ctx.device.RCC.constrain();
         let port_a = ctx.device.GPIOA.split(&mut rcc);
+        let port_b = ctx.device.GPIOB.split(&mut rcc);
+
+        let mut delay = ctx.device.TIM1.delay(&mut rcc);
 
         let mut timer = ctx.device.TIM2.timer(&mut rcc);
         timer.listen();
 
-        let pwm_core = ctx.device.TIM3.pwm(320.hz(), &mut rcc);
-        let mut pwm = pwm_core.bind_pin(port_a.pa7);
+        let pwm = ctx.device.TIM3.pwm(320.hz(), &mut rcc);
+        let mut pwm = PwmPack::new(
+            pwm.bind_pin(port_b.pb0),
+            pwm.bind_pin(port_a.pa7),
+            pwm.bind_pin(port_a.pa6),
+            port_a.pa5.into(),
+            port_a.pa4.into(),
+        );
         pwm.set_duty(0);
         pwm.enable();
-
-        let mut pwm_comp = pwm_core.bind_pin(port_a.pa6);
-        pwm_comp.set_duty(0);
-        pwm_comp.enable();
 
         let mut adc = ctx.device.ADC.constrain(&mut rcc);
         adc.set_sample_time(adc::SampleTime::T_80);
@@ -63,15 +67,10 @@ mod app {
         adc.set_oversampling_ratio(adc::OversamplingRatio::X_256);
         adc.set_oversampling_shift(20);
         adc.oversampling_enable(true);
-
-        let mut delay = ctx.device.TIM1.delay(&mut rcc);
         delay.delay(100.us());
         adc.calibrate();
 
         let adc_pin = port_a.pa1.into_analog();
-        let reg_pin = port_a.pa5.into();
-        let reg_comp_pin = port_a.pa4.into();
-        let reg = Regulator::new(pwm.get_max_duty() as i32);
 
         let uart_cfg = serial::BasicConfig::default().baudrate(115_200.bps());
         let mut uart = ctx
@@ -82,13 +81,13 @@ mod app {
         uart.listen(serial::Event::Rxne);
 
         let shell = UShell::new(uart, AUTOCOMPLETE, LRUHistory::default());
+        let reg = Regulator::new(pwm.get_max_duty());
 
         (
             Shared {
                 reg,
                 timer,
                 pwm,
-                pwm_comp,
                 freq: 0,
                 on: false,
                 inverse: true,
@@ -98,8 +97,6 @@ mod app {
                 adc,
                 shell,
                 adc_pin,
-                reg_comp_pin,
-                reg_pin,
             },
             init::Monotonics(),
         )
@@ -108,7 +105,7 @@ mod app {
     #[task(
         capacity = 8,
         local = [shell],
-        shared = [freq, inverse, on, trace, reg, timer, pwm, pwm_comp],
+        shared = [freq, inverse, on, trace, reg, timer, pwm],
         priority = 1
     )]
     fn env(ctx: env::Context, sig: EnvSignal) {
@@ -122,9 +119,9 @@ mod app {
     }
 
     #[task(
-        binds = TIM2, 
-        local = [adc, adc_pin, reg_comp_pin, reg_pin], 
-        shared = [trace, inverse, reg, timer, pwm, pwm_comp], 
+        binds = TIM2,
+        local = [adc, adc_pin],
+        shared = [trace, inverse, reg, timer, pwm],
         priority = 2
     )]
     fn timer_tick(ctx: timer_tick::Context) {
@@ -133,15 +130,10 @@ mod app {
             mut timer,
             mut trace,
             mut pwm,
-            mut pwm_comp,
             mut inverse,
         } = ctx.shared;
-        let timer_tick::LocalResources {
-            adc,
-            adc_pin,
-            reg_comp_pin,
-            reg_pin,
-        } = ctx.local;
+        let timer_tick::LocalResources { adc, adc_pin } = ctx.local;
+
         let raw = adc.read(adc_pin).unwrap_or(0);
 
         pub const MAX: i32 = 65_535;
@@ -153,21 +145,10 @@ mod app {
         };
 
         let duty = reg.lock(|reg| reg.update(val));
-
-        if duty.is_positive() {
-            reg_pin.set_high().ok();
-            reg_comp_pin.set_low().ok();
-            pwm.lock(|pwm| pwm.set_duty(duty.abs() as _));
-            pwm_comp.lock(|pwm| pwm.set_duty(0));
-        } else {
-            reg_pin.set_low().ok();
-            reg_comp_pin.set_high().ok();
-            pwm.lock(|pwm| pwm.set_duty(0));
-            pwm_comp.lock(|pwm| pwm.set_duty(duty.abs() as _));
-        }
+        pwm.lock(|pwm| pwm.set_duty(duty));
 
         if trace.lock(|trace| *trace) {
-            env::spawn(EnvSignal::LogState).ok();
+            env::spawn(EnvSignal::TraceState).ok();
         }
 
         timer.lock(|timer| timer.clear_irq());

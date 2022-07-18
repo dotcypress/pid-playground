@@ -12,18 +12,18 @@ pub type EnvResult = SpinResult<Uart, ()>;
 
 pub enum EnvSignal {
     SpinShell,
-    LogState,
+    TraceState,
 }
 
 impl Env<'_> {
     pub fn on_signal(&mut self, shell: &mut Shell, sig: EnvSignal) -> EnvResult {
         match sig {
-            EnvSignal::LogState => self.log_state(shell),
+            EnvSignal::TraceState => self.print_trace(shell),
             EnvSignal::SpinShell => shell.spin(self),
         }
     }
 
-    fn log_state(&mut self, shell: &mut Shell) -> EnvResult {
+    fn print_trace(&mut self, shell: &mut Shell) -> EnvResult {
         let (sp, last, duty, last_duty) = self
             .reg
             .lock(|reg| (reg.sp, reg.last, reg.duty, reg.last_duty));
@@ -49,9 +49,9 @@ impl Env<'_> {
     }
 
     fn set_cmd(&mut self, shell: &mut Shell, args: &str) -> ShellResult<Uart> {
-        match args.split_once(" ") {
+        match args.split_once(' ') {
             Some((k, gain)) => {
-                let gain = match gain.split_once(" ") {
+                let gain = match gain.split_once(' ') {
                     Some((num, den_pwr)) => {
                         match (
                             btoi::btoi::<i32>(num.as_bytes()),
@@ -117,7 +117,6 @@ impl Env<'_> {
 
     fn stop_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
         self.pwm.lock(|pwm| pwm.set_duty(0));
-        self.pwm_comp.lock(|pwm| pwm.set_duty(0));
         self.timer.lock(|timer| timer.pause());
         self.freq.lock(|freq| *freq = 0);
         shell.write_str(CR)?;
@@ -198,8 +197,8 @@ impl Environment<Uart, Autocomplete, History, (), 24> for Env<'_> {
 
     fn control(&mut self, shell: &mut Shell, code: u8) -> EnvResult {
         match code {
-            control::CTRL_C => self.stop_cmd(shell, "")?,
-            control::CTRL_L => {
+            control::CTRL_X => self.stop_cmd(shell, "")?,
+            control::CTRL_C => {
                 self.trace.lock(|trace| *trace = !*trace);
                 shell.write_str(SHELL_PROMPT)?;
             }
@@ -226,7 +225,7 @@ pub const AUTOCOMPLETE: Autocomplete = autocomplete::StaticAutocomplete([
     "trace",
 ]);
 
-const BAD_INPUT_ERR: &'static str = "\r\nbad input\r\n";
+const BAD_INPUT_ERR: &str = "\r\nbad input\r\n";
 const CR: &str = "\r\n";
 const SHELL_PROMPT: &str = "\x1b[35m» \x1b[0m";
 const HELP: &str = "\r\n\
@@ -243,8 +242,8 @@ COMMANDS:\r\n\
 \x20 help [pinout|usage]  Print help message\r\n\
 \x20 clear                Clear screen\r\n\r\n\
 CONTROL KEYS:\r\n\
-\x20 Ctrl+L               Toggle serial logger\r\n\r\n\
-\x20 Ctrl+C               Stop regulator\r\n\r\n\
+\x20 Ctrl+C               Toggle serial logger\r\n\r\n\
+\x20 Ctrl+X               Stop regulator\r\n\r\n\
 ";
 
 const USAGE: &str = "\r\n\
@@ -265,15 +264,15 @@ USAGE EXAMPLES:\r\n\
 const PINOUT: &str = "\r\n\
 \x20             STM32G0xxFx  \r\n\
 \x20            ╔═══════════╗ \r\n\
-\x20    PB7|PB8 ╣1 ¤      20╠ PB3|PB4|PB5|PB6    \r\n\
-\x20   PC9|PC14 ╣2        19╠ PA14|PA15   (SWDIO)\r\n\
-\x20       PC15 ╣3        18╠ PA13       (SWDCLK)\r\n\
-\x20        Vdd ╣4        17╠ PA12[PA10]         \r\n\
-\x20        Vss ╣5        16╠ PA11[PA9]          \r\n\
-\x20       nRst ╣6        15╠ PA8|PB0|PB1|PB2    \r\n\
-\x20        PA0 ╣7        14╠ PA7           (PWM)\r\n\
-\x20 (ADC)  PA1 ╣8        13╠ PA6      (PWM_COMP)\r\n\
-\x20 (TX)   PA2 ╣9        12╠ PA5           (REG)\r\n\
-\x20 (RX)   PA3 ╣10       11╠ PA4      (REG_COMP)\r\n\
+\x20    PB7|PB8 ╣1 ¤      20╠ PB3|PB4|PB5|PB6      \r\n\
+\x20   PC9|PC14 ╣2        19╠ PA14|PA15     (SWDIO)\r\n\
+\x20       PC15 ╣3        18╠ PA13         (SWDCLK)\r\n\
+\x20        Vdd ╣4        17╠ PA12[PA10]           \r\n\
+\x20        Vss ╣5        16╠ PA11[PA9]            \r\n\
+\x20       nRst ╣6        15╠ PA8|PB0|PB1|PB2 (PWM)\r\n\
+\x20        PA0 ╣7        14╠ PA7           (PWM_P)\r\n\
+\x20 (ADC)  PA1 ╣8        13╠ PA6           (PWM_N)\r\n\
+\x20 (TX)   PA2 ╣9        12╠ PA5         (PHASE_P)\r\n\
+\x20 (RX)   PA3 ╣10       11╠ PA4         (PHASE_N)\r\n\
 \x20            ╚═══════════╝ \r\n\r\n\
 ";

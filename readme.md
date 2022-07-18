@@ -1,6 +1,6 @@
 # pid-playground
 
-🦀 STM32G031F6 PID regulator with serial shell.
+🦀 STM32G031F6 PID regulator debugger with embedded serial shell.
 
 ## License
 
