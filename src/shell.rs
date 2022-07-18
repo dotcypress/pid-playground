@@ -13,6 +13,7 @@ pub type EnvResult = SpinResult<Uart, ()>;
 pub enum EnvSignal {
     SpinShell,
     TraceState,
+    Fault,
 }
 
 impl Env<'_> {
@@ -20,7 +21,13 @@ impl Env<'_> {
         match sig {
             EnvSignal::TraceState => self.print_trace(shell),
             EnvSignal::SpinShell => shell.spin(self),
+            EnvSignal::Fault => self.print_fault(shell),
         }
+    }
+
+    fn print_fault(&mut self, shell: &mut Shell) -> EnvResult {
+        write!(shell, "\r\nFAULT DETECTED")?;
+        Ok(())
     }
 
     fn print_trace(&mut self, shell: &mut Shell) -> EnvResult {
@@ -141,6 +148,7 @@ impl Env<'_> {
 
     fn print_config_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
         let freq = self.freq.lock(|freq| *freq);
+        let fault = self.fault.lock(|fault| *fault);
         let inverse = self.inverse.lock(|inverse| *inverse);
         let (sp, last, kp, ki, kd, kf, kv) = self.reg.lock(|reg| {
             (
@@ -150,7 +158,7 @@ impl Env<'_> {
 
         write!(shell, "{0}reg:\t{1}{0}f:\t{2} Hz{0}adc:\t{3}{0}sp:\t{4}{0}fb:\t{5}{0}kp:\t{6}{0}ki:\t{7}{0}kd:\t{8}{0}kf:\t{9}{0}kv:\t{10}{0}",
             CR,
-            if freq > 0 { "on" } else { "off" },
+            if fault {"fault"} else if freq > 0 { "on" } else { "off" },
             freq,
             if inverse { "inverted" } else { "non inverted" },
             sp,
@@ -242,7 +250,7 @@ COMMANDS:\r\n\
 \x20 help [pinout|usage]  Print help message\r\n\
 \x20 clear                Clear screen\r\n\r\n\
 CONTROL KEYS:\r\n\
-\x20 Ctrl+C               Toggle serial logger\r\n\r\n\
+\x20 Ctrl+C               Toggle serial logger\r\n
 \x20 Ctrl+X               Stop regulator\r\n\r\n\
 ";
 
@@ -264,15 +272,15 @@ USAGE EXAMPLES:\r\n\
 const PINOUT: &str = "\r\n\
 \x20             STM32G0xxFx  \r\n\
 \x20            ╔═══════════╗ \r\n\
-\x20    PB7|PB8 ╣1 ¤      20╠ PB3|PB4|PB5|PB6      \r\n\
-\x20   PC9|PC14 ╣2        19╠ PA14|PA15     (SWDIO)\r\n\
-\x20       PC15 ╣3        18╠ PA13         (SWDCLK)\r\n\
-\x20        Vdd ╣4        17╠ PA12[PA10]           \r\n\
-\x20        Vss ╣5        16╠ PA11[PA9]            \r\n\
-\x20       nRst ╣6        15╠ PA8|PB0|PB1|PB2 (PWM)\r\n\
-\x20        PA0 ╣7        14╠ PA7           (PWM_P)\r\n\
-\x20 (ADC)  PA1 ╣8        13╠ PA6           (PWM_N)\r\n\
-\x20 (TX)   PA2 ╣9        12╠ PA5         (PHASE_P)\r\n\
-\x20 (RX)   PA3 ╣10       11╠ PA4         (PHASE_N)\r\n\
+\x20    PB7|PB8 ╣1 ¤      20╠ PB3|PB4|PB5|PB6       \r\n\
+\x20   PC9|PC14 ╣2        19╠ PA14|PA15      (SWDIO)\r\n\
+\x20       PC15 ╣3        18╠ PA13          (SWDCLK)\r\n\
+\x20        Vdd ╣4        17╠ PA12[PA10]     (FAULT)\r\n\
+\x20        Vss ╣5        16╠ PA11[PA9]  (FAULT_INV)\r\n\
+\x20       nRst ╣6        15╠ PA8|PB0|PB1|PB2  (PWM)\r\n\
+\x20        PA0 ╣7        14╠ PA7            (PWM_P)\r\n\
+\x20 (ADC)  PA1 ╣8        13╠ PA6            (PWM_N)\r\n\
+\x20 (TX)   PA2 ╣9        12╠ PA5          (PHASE_P)\r\n\
+\x20 (RX)   PA3 ╣10       11╠ PA4          (PHASE_N)\r\n\
 \x20            ╚═══════════╝ \r\n\r\n\
 ";

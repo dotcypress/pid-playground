@@ -14,7 +14,7 @@ use crate::pwm::*;
 use crate::regulator::*;
 use crate::shell::*;
 use dyadic::DF;
-use hal::{analog::adc, gpio::*, prelude::*, serial, stm32, timer::*};
+use hal::{analog::adc, exti::Event, gpio::*, prelude::*, serial, stm32, timer::*};
 use ushell::{history::LRUHistory, UShell};
 
 #[rtic::app(device = hal::stm32, peripherals = true, dispatchers = [USART1])]
@@ -25,6 +25,9 @@ mod app {
     struct Local {
         adc: adc::Adc,
         adc_pin: gpioa::PA1<Analog>,
+        fault_pin: gpioa::PA12<Input<PullDown>>,
+        fault_inv_pin: gpioa::PA11<Input<PullUp>>,
+        exti: stm32::EXTI,
         shell: shell::Shell,
     }
 
@@ -36,6 +39,7 @@ mod app {
         reg: Regulator,
         freq: u32,
         on: bool,
+        fault: bool,
         trace: bool,
     }
 
@@ -70,7 +74,16 @@ mod app {
         delay.delay(100.us());
         adc.calibrate();
 
+        let mut exti = ctx.device.EXTI;
         let adc_pin = port_a.pa1.into_analog();
+        let fault_pin = port_a
+            .pa12
+            .listen(SignalEdge::All, &mut exti)
+            .into_pull_down_input();
+        let fault_inv_pin = port_a
+            .pa11
+            .listen(SignalEdge::All, &mut exti)
+            .into_pull_up_input();
 
         let uart_cfg = serial::BasicConfig::default().baudrate(115_200.bps());
         let mut uart = ctx
@@ -83,20 +96,26 @@ mod app {
         let shell = UShell::new(uart, AUTOCOMPLETE, LRUHistory::default());
         let reg = Regulator::new(pwm.get_max_duty());
 
+        let fault = fault_pin.is_high().unwrap() || fault_inv_pin.is_low().unwrap();
+
         (
             Shared {
                 reg,
                 timer,
                 pwm,
                 freq: 0,
+                fault,
                 on: false,
                 inverse: true,
                 trace: false,
             },
             Local {
                 adc,
+                exti,
                 shell,
                 adc_pin,
+                fault_pin,
+                fault_inv_pin,
             },
             init::Monotonics(),
         )
@@ -105,7 +124,7 @@ mod app {
     #[task(
         capacity = 8,
         local = [shell],
-        shared = [freq, inverse, on, trace, reg, timer, pwm],
+        shared = [freq, inverse, on, fault, trace, reg, timer, pwm],
         priority = 1
     )]
     fn env(ctx: env::Context, sig: EnvSignal) {
@@ -121,7 +140,7 @@ mod app {
     #[task(
         binds = TIM2,
         local = [adc, adc_pin],
-        shared = [trace, inverse, reg, timer, pwm],
+        shared = [fault, trace, inverse, reg, timer, pwm],
         priority = 2
     )]
     fn timer_tick(ctx: timer_tick::Context) {
@@ -130,10 +149,18 @@ mod app {
             mut timer,
             mut trace,
             mut pwm,
+            mut fault,
             mut inverse,
         } = ctx.shared;
-        let timer_tick::LocalResources { adc, adc_pin } = ctx.local;
 
+        timer.lock(|timer| timer.clear_irq());
+
+        if fault.lock(|fault| *fault) {
+            pwm.lock(|pwm| pwm.set_duty(0));
+            return;
+        }
+
+        let timer_tick::LocalResources { adc, adc_pin } = ctx.local;
         let raw = adc.read(adc_pin).unwrap_or(0);
 
         pub const MAX: i32 = 65_535;
@@ -150,7 +177,24 @@ mod app {
         if trace.lock(|trace| *trace) {
             env::spawn(EnvSignal::TraceState).ok();
         }
+    }
 
-        timer.lock(|timer| timer.clear_irq());
+    #[task(binds = EXTI4_15, priority = 3, local = [exti, fault_pin, fault_inv_pin], shared=[fault])]
+    fn fault_ext(ctx: fault_ext::Context) {
+        let fault_ext::SharedResources { mut fault } = ctx.shared;
+        let fault_ext::LocalResources {
+            exti,
+            fault_pin,
+            fault_inv_pin,
+        } = ctx.local;
+
+        exti.unpend(Event::GPIO11);
+        exti.unpend(Event::GPIO12);
+
+        let fault_cond = fault_pin.is_high().unwrap() || fault_inv_pin.is_low().unwrap();
+        fault.lock(|fault| *fault = fault_cond);
+        if fault_cond {
+            env::spawn(EnvSignal::Fault).ok();
+        }
     }
 }
