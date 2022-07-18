@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "dyadic"
-version = "0.0.7"
+version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd9186eb5c16e986ed771622df8017b173308763296154a9c45a10376868e87"
+checksum = "e54f17a06423cef697be2a3f56d1f6323bbfc830b137d9c75ffa67bbaa056674"
 
 [[package]]
 name = "embedded-hal"
@@ -448,9 +448,9 @@ dependencies = [
 
 [[package]]
 name = "stm32g0xx-hal"
-version = "0.1.2"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bfb57f421c3acb1dafef58cfee1d6beefab85c7bf618080aeef4c4a3c3c250d"
+checksum = "0a9d4579a8453f759213dc8c3f97d9b089436d4ed14250f5b673a212eeccf4c3"
 dependencies = [
  "bare-metal 1.0.0",
  "cortex-m",

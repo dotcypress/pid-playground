@@ -24,9 +24,9 @@ impl Regulator {
         }
     }
 
-    pub fn update(&mut self, fb: i32) -> u32 {
+    pub fn update(&mut self, fb: i32) -> i32 {
         let duty = self.duty + self.pid.next(self.sp, fb);
-        let duty = duty.round(14).clamp(DF::zero(), self.max_duty);
+        let duty = duty.round(14).clamp(-self.max_duty, self.max_duty);
         self.last = fb;
         self.last_duty = self.duty;
         self.duty = duty;

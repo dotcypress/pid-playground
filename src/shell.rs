@@ -116,7 +116,8 @@ impl Env<'_> {
     }
 
     fn stop_cmd(&mut self, shell: &mut Shell, _args: &str) -> ShellResult<Uart> {
-        self.pwm.lock(|heater| heater.set_duty(0));
+        self.pwm.lock(|pwm| pwm.set_duty(0));
+        self.pwm_comp.lock(|pwm| pwm.set_duty(0));
         self.timer.lock(|timer| timer.pause());
         self.freq.lock(|freq| *freq = 0);
         shell.write_str(CR)?;
@@ -197,7 +198,8 @@ impl Environment<Uart, Autocomplete, History, (), 24> for Env<'_> {
 
     fn control(&mut self, shell: &mut Shell, code: u8) -> EnvResult {
         match code {
-            control::CTRL_C => {
+            control::CTRL_C => self.stop_cmd(shell, "")?,
+            control::CTRL_L => {
                 self.trace.lock(|trace| *trace = !*trace);
                 shell.write_str(SHELL_PROMPT)?;
             }
@@ -241,7 +243,8 @@ COMMANDS:\r\n\
 \x20 help [pinout|usage]  Print help message\r\n\
 \x20 clear                Clear screen\r\n\r\n\
 CONTROL KEYS:\r\n\
-\x20 Ctrl+C               Toggle serial logger\r\n\r\n\
+\x20 Ctrl+L               Toggle serial logger\r\n\r\n\
+\x20 Ctrl+C               Stop regulator\r\n\r\n\
 ";
 
 const USAGE: &str = "\r\n\
@@ -260,7 +263,7 @@ USAGE EXAMPLES:\r\n\
 ";
 
 const PINOUT: &str = "\r\n\
-\x20             STM32G031F6  \r\n\
+\x20             STM32G0xxFx  \r\n\
 \x20            ╔═══════════╗ \r\n\
 \x20    PB7|PB8 ╣1 ¤      20╠ PB3|PB4|PB5|PB6    \r\n\
 \x20   PC9|PC14 ╣2        19╠ PA14|PA15   (SWDIO)\r\n\
@@ -269,8 +272,8 @@ const PINOUT: &str = "\r\n\
 \x20        Vss ╣5        16╠ PA11[PA9]          \r\n\
 \x20       nRst ╣6        15╠ PA8|PB0|PB1|PB2    \r\n\
 \x20        PA0 ╣7        14╠ PA7           (PWM)\r\n\
-\x20 (ADC)  PA1 ╣8        13╠ PA6                \r\n\
-\x20 (TX)   PA2 ╣9        12╠ PA5                \r\n\
-\x20 (RX)   PA3 ╣10       11╠ PA4                \r\n\
+\x20 (ADC)  PA1 ╣8        13╠ PA6      (PWM_COMP)\r\n\
+\x20 (TX)   PA2 ╣9        12╠ PA5           (REG)\r\n\
+\x20 (RX)   PA3 ╣10       11╠ PA4      (REG_COMP)\r\n\
 \x20            ╚═══════════╝ \r\n\r\n\
 ";
