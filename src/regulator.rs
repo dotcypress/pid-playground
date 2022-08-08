@@ -30,8 +30,8 @@ impl Regulator {
     }
 
     pub fn reset_clip(&mut self) {
-        self.min_duty = self.absolute_max_duty;
-        self.max_duty = -self.absolute_max_duty;
+        self.min_duty = -self.absolute_max_duty;
+        self.max_duty = self.absolute_max_duty;
     }
 
     pub fn clip(&mut self, min_duty: i32, max_duty: i32) {

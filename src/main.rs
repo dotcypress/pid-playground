@@ -15,7 +15,7 @@ use crate::regulator::*;
 use crate::shell::*;
 use dyadic::DF;
 use hal::{analog::adc, exti::Event, gpio::*, prelude::*, serial, stm32, timer::*};
-use ushell::{history::LRUHistory, UShell};
+use ushell::{history::LRUHistory};
 
 #[rtic::app(device = hal::stm32, peripherals = true, dispatchers = [USART1])]
 mod app {
@@ -93,7 +93,7 @@ mod app {
             .expect("Failed to init serial port");
         uart.listen(serial::Event::Rxne);
 
-        let shell = UShell::new(uart, AUTOCOMPLETE, LRUHistory::default());
+        let shell = Shell::new(uart, AUTOCOMPLETE, LRUHistory::default());
         let reg = Regulator::new(pwm.get_max_duty());
 
         let fault = fault_pin.is_high().unwrap() || fault_inv_pin.is_low().unwrap();

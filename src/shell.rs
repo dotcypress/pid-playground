@@ -278,7 +278,7 @@ COMMANDS:\r\n\
 \x20 help [pinout|usage]        Print help message\r\n\
 \x20 clear                      Clear screen\r\n\r\n\
 CONTROL KEYS:\r\n\
-\x20 Ctrl+C                     Toggle serial logger\r\n
+\x20 Ctrl+C                     Toggle serial logger\r\n\
 \x20 Ctrl+X                     Stop regulator\r\n\r\n\
 ";
 
@@ -300,8 +300,8 @@ USAGE EXAMPLES:\r\n\
 ";
 
 const PINOUT: &str = "\r\n\
-\x20             STM32G0xxFx  \r\n\
-\x20            ╔═══════════╗ \r\n\
+\x20             STM32G0xxFx \r\n\
+\x20            ╔═══════════╗\r\n\
 \x20    PB7|PB8 ╣1 ¤      20╠ PB3|PB4|PB5|PB6       \r\n\
 \x20   PC9|PC14 ╣2        19╠ PA14|PA15      (SWDIO)\r\n\
 \x20       PC15 ╣3        18╠ PA13          (SWDCLK)\r\n\
@@ -312,5 +312,4 @@ const PINOUT: &str = "\r\n\
 \x20 (ADC)  PA1 ╣8        13╠ PA6            (PWM_N)\r\n\
 \x20 (TX)   PA2 ╣9        12╠ PA5          (PHASE_P)\r\n\
 \x20 (RX)   PA3 ╣10       11╠ PA4          (PHASE_N)\r\n\
-\x20            ╚═══════════╝ \r\n\r\n\
-";
+\x20            ╚═══════════╝ \r\n\r\n";

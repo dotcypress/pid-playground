@@ -53,7 +53,7 @@ impl hal::PwmPin for PwmPack {
     }
 
     fn get_max_duty(&self) -> Self::Duty {
-        self.ch_abs.get_duty() as _
+        self.ch_abs.get_max_duty() as _
     }
 
     fn set_duty(&mut self, duty: Self::Duty) {
